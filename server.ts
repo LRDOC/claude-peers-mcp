@@ -39,6 +39,7 @@ const BROKER_URL = `http://127.0.0.1:${BROKER_PORT}`;
 const POLL_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const BROKER_SCRIPT = new URL("./broker.ts", import.meta.url).pathname;
+const DISABLE_AUTO_POLL = process.env.CLAUDE_PEERS_DISABLE_AUTO_POLL === "1";
 
 // --- Broker communication ---
 
@@ -516,8 +517,11 @@ async function main() {
   await mcp.connect(new StdioServerTransport());
   log("MCP connected");
 
-  // 6. Start polling for inbound messages
-  const pollTimer = setInterval(pollAndPushMessages, POLL_INTERVAL_MS);
+  // 6. Start polling for inbound messages unless the client relies on manual checks.
+  const pollTimer = DISABLE_AUTO_POLL ? null : setInterval(pollAndPushMessages, POLL_INTERVAL_MS);
+  if (DISABLE_AUTO_POLL) {
+    log("Auto-poll disabled; inbound messages must be read via check_messages");
+  }
 
   // 7. Start heartbeat
   const heartbeatTimer = setInterval(async () => {
@@ -532,7 +536,9 @@ async function main() {
 
   // 8. Clean up on exit
   const cleanup = async () => {
-    clearInterval(pollTimer);
+    if (pollTimer) {
+      clearInterval(pollTimer);
+    }
     clearInterval(heartbeatTimer);
     if (myId) {
       try {
